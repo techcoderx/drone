@@ -2,7 +2,7 @@ use actix_cors::Cors;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, Responder, http::StatusCode, middleware::Condition};
 use moka::{future::Cache, Expiry};
 use reqwest::{Client, ClientBuilder};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::{Arc};
 use std::time::{Duration, Instant, SystemTime};
@@ -101,6 +101,7 @@ pub struct APIRequest {
     params: Option<Value>,
 }
 
+/*
 #[derive(Debug, Deserialize, Clone)]
 enum ErrorField {
     Object(Value),   // JSON from Hived
@@ -118,6 +119,7 @@ impl Serialize for ErrorField {
         }
     }
 }
+*/
 
 // data returned just for logging/debugging
 #[derive(Clone,Debug)]
@@ -497,6 +499,79 @@ async fn handle_request(request: APIRequest, data: &web::Data<AppData>, client_i
             tracking_info: None
         }
     )?;
+
+    let method_name = mapped_method.full_method.clone();
+    if &method_name == "condenser_api.broadcast_transaction_synchronous" {
+        return Err(ErrorStructure {
+            jsonrpc: request.jsonrpc.clone(),
+            id : request.id.clone(),
+            error: json!({
+                "code": -32800,
+                "message": "Broadcast transaction synchronous is deprecated.",
+                "error": "Broadcast transaction synchronous is deprecated."
+            }),
+            http_status: StatusCode::OK,
+            tracking_info: None
+        });
+    }
+
+    if &method_name == "condenser_api.broadcast_transaction" && mapped_method.params.is_some() {
+        let param = mapped_method.clone().params.unwrap();
+        let empty: Vec<Value> = Vec::new();
+        let txns = param.as_array().unwrap_or(&empty);
+        for i in 0..txns.len() {
+            let ops = txns[i].get("operations").unwrap_or(&json!({})).clone();
+            let ops = ops.as_array().unwrap_or(&empty);
+            for j in 0..ops.len() {
+                let op = ops[j].as_array().unwrap_or(&empty).clone();
+                if op.len() > 0 {
+                    let op_type = op[0].as_str().unwrap_or("");
+                    if op_type.contains("witness") {
+                        return Err(ErrorStructure {
+                            jsonrpc: request.jsonrpc.clone(),
+                            id : request.id.clone(),
+                            error: json!({
+                                "code": -32800,
+                                "message": "Witness operations are not allowed on this testnet API node.",
+                                "error": "Witness operations are not allowed on this testnet API node."
+                            }),
+                            http_status: StatusCode::OK,
+                            tracking_info: None
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    if &method_name == "network_broadcast_api.broadcast_transaction" {
+        let param = mapped_method.clone().params.unwrap();
+        let trx = param.get("trx");
+        if trx.is_some() {
+            let empty: Vec<Value> = Vec::new();
+            let op = trx.unwrap();
+            let ops = op.get("operations").unwrap_or(&json!({})).as_array().unwrap_or(&empty).clone();
+            for i in 0..ops.len() {
+                let op_type = ops[i].get("type");
+                if op_type.is_some() {
+                    let op_type = op_type.unwrap().as_str().unwrap_or("");
+                    if op_type.contains("witness") {
+                        return Err(ErrorStructure {
+                            jsonrpc: request.jsonrpc.clone(),
+                            id : request.id.clone(),
+                            error: json!({
+                                "code": -32800,
+                                "message": "Witness operations are not allowed on this testnet API node.",
+                                "error": "Witness operations are not allowed on this testnet API node."
+                            }),
+                            http_status: StatusCode::OK,
+                            tracking_info: None
+                        });
+                    }
+                }
+            }
+        }
+    }
 
     check_for_future_block_requests(&mapped_method, data, request_id).await;
 
