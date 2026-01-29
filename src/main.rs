@@ -526,7 +526,7 @@ async fn handle_request(request: APIRequest, data: &web::Data<AppData>, client_i
                 let op = ops[j].as_array().unwrap_or(&empty).clone();
                 if op.len() > 0 {
                     let op_type = op[0].as_str().unwrap_or("");
-                    if op_type.contains("witness") {
+                    if op_type.contains("witness") || op_type.contains("feed") {
                         return Err(ErrorStructure {
                             jsonrpc: request.jsonrpc.clone(),
                             id : request.id.clone(),
@@ -555,7 +555,7 @@ async fn handle_request(request: APIRequest, data: &web::Data<AppData>, client_i
                 let op_type = ops[i].get("type");
                 if op_type.is_some() {
                     let op_type = op_type.unwrap().as_str().unwrap_or("");
-                    if op_type.contains("witness") {
+                    if op_type.contains("witness") || op_type.contains("feed") {
                         return Err(ErrorStructure {
                             jsonrpc: request.jsonrpc.clone(),
                             id : request.id.clone(),
